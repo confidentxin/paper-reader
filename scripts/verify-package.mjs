@@ -1,0 +1,9 @@
+import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import {execFileSync} from 'node:child_process';import {createHash} from 'node:crypto';import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),asar=require('@electron/asar'),pkg=JSON.parse(await fs.readFile('package.json','utf8'));
+const bundle=path.join(process.env.PAPER_READER_BUILD_ROOT||path.join(os.homedir(),'Applications/Paper Reader Builds'),`Paper Reader-darwin-${process.arch}`,'Paper Reader.app'),zip=`release/Paper Reader-${pkg.version}-darwin-${process.arch}.zip`,temp=await fs.mkdtemp(path.join(os.tmpdir(),'paper-package-verify-'));
+try {
+ execFileSync('codesign',['--verify','--deep','--strict',bundle]);execFileSync('ditto',['-x','-k',zip,temp]);const copy=path.join(temp,'Paper Reader.app');execFileSync('codesign',['--verify','--deep','--strict',copy]);
+ const src=path.join(bundle,'Contents/Resources/app.asar'),dest=path.join(copy,'Contents/Resources/app.asar');const sha=async p=>createHash('sha256').update(await fs.readFile(p)).digest('hex');if(await sha(src)!==await sha(dest))throw new Error('ASAR differs');
+ const files=asar.listPackage(src);if(files.some(p=>/\/tests\/|\/samples\/|node_modules|auth\.json/.test(p)))throw new Error('Unexpected payload');for(const p of ['/electron/paper-chat.cjs','/electron/annotations.cjs','/electron/bilingual.cjs','/electron/page-workflow.cjs','/electron/math.cjs','/electron/vendor/katex.cjs','/electron/vendor/KATEX_LICENSE','/dist/THIRD_PARTY_LICENSES.txt'])if(!files.includes(p))throw new Error('Missing '+p);
+ const result={zip,sha256:await sha(zip),bytes:(await fs.stat(zip)).size,bundle,signature:'verified',extractedSignature:'verified',asarMatches:true,files:files.length,excludedTestsSamplesCredentials:true};await fs.writeFile('artifacts/package-v3-results.json',JSON.stringify(result,null,2));console.log(result);
+}finally{await fs.rm(temp,{recursive:true,force:true});}

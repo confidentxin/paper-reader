@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+*.tsbuildinfo
+artifacts/
+release/
+.packaging/
+public/pdf-assets/
+
+# Local planning, personal validation evidence and credentials
+/docs/*
+!/docs/dependencies.md
+/AGENTS.md
+.env
+.env.*
+*.sqlite
+*.sqlite-*
+*.db

@@ -1,0 +1,42 @@
+{
+  "name": "paper-reader",
+  "private": true,
+  "version": "0.5.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "licenses": "node scripts/licenses.mjs",
+    "desktop": "npm run build && electron .",
+    "desktop:dev": "READER_DEV_URL=http://127.0.0.1:5173 electron .",
+    "package:mac": "npm run licenses && npm run build && node scripts/package.mjs",
+    "test": "node --test tests/*.test.cjs tests/*.test.mjs",
+    "test:desktop": "node tests/desktop.mjs",
+    "postinstall": "node node_modules/electron/install.js",
+    "test:bilingual": "node tests/bilingual-desktop.mjs",
+    "test:translation:real": "node tests/full-translation-real.mjs",
+    "test:annotations": "node tests/annotations-desktop.mjs",
+    "test:annotations:real": "node tests/annotations-real.cjs",
+    "test:chat": "node tests/paper-chat-desktop.mjs"
+  },
+  "dependencies": {
+    "katex": "0.19.0",
+    "lucide-react": "^0.468.0",
+    "pdfjs-dist": "6.4.299",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "@types/katex": "0.16.8",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "electron": "44.8.0",
+    "playwright": "1.64.1",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0"
+  },
+  "main": "electron/main.cjs"
+}
