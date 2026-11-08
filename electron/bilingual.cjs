@@ -39,19 +39,22 @@ class BilingualService {
   }
   saveConfig(input) {
     if (this.running) throw new Error('请先暂停当前翻译任务再修改模型。');
-    if (!input || !['api','codex'].includes(input.provider)) throw new Error('提供商无效。');
+    if (!input || !['api','codex','claude','gemini'].includes(input.provider)) throw new Error('提供商无效。');
     const model = String(input.model || '').trim();
     if (!model) throw new Error('请填写实际可用的模型名，确保译文缓存记录明确模型。');
     if (model.length > 200 || /[\r\n]/.test(model)) throw new Error('模型名无效。');
     const config = { provider: input.provider, model, baseURL: '', executable: '', vision:input.vision!==false };
     if (input.provider === 'api') {
-      const u = new URL(input.baseURL);
+      const u = new URL(require('./assistant-api.cjs').baseURL(input.baseURL));
+      config.protocol=['chat','responses','anthropic'].includes(input.protocol)?input.protocol:'chat';
+      config.preset=require('./assistant-api.cjs').PRESETS.some(p=>p.id===input.preset)?input.preset:'custom';
       if (u.username || u.password || u.search || u.hash || (u.protocol !== 'https:' && !(u.protocol === 'http:' && ['localhost','127.0.0.1','[::1]'].includes(u.hostname)))) throw new Error('服务地址需要 HTTPS（本地回环可用 HTTP），不能包含凭据或查询参数。');
       if (!model) throw new Error('请填写模型名。');
       config.baseURL = u.href.replace(/\/$/,'');
     } else {
-      if (!path.isAbsolute(input.executable || '')) throw new Error('请选择 Codex 可执行文件的绝对路径。');
+      if (!path.isAbsolute(input.executable || '')) throw new Error('请选择 CLI 可执行文件的绝对路径。');
       config.executable = input.executable;
+      if(config.provider!=='codex')config.vision=false;
     }
     const old = this.db.prepare('SELECT * FROM model_settings WHERE id=1').get();
     const oldConfig = old ? JSON.parse(old.config) : {};
@@ -66,11 +69,7 @@ class BilingualService {
     this.db.prepare('INSERT OR REPLACE INTO model_settings VALUES (1,?,?)').run(JSON.stringify(config),secret);
     return this.config();
   }
-  async detectCLI() {
-    const candidates = [process.env.PAPER_READER_CODEX_PATH, '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex', '/Applications/Codex.app/Contents/Resources/codex', '/opt/homebrew/bin/codex', '/usr/local/bin/codex', ...String(process.env.PATH || '').split(path.delimiter).map(p=>path.join(p,'codex'))].filter(Boolean);
-    for (const file of candidates) { try { await fs.access(file, 1); return file; } catch {} }
-    return '';
-  }
+  async detectCLI(provider='codex') {return require('./model-cli.cjs').detectCLI(provider);}
   saveParse(id, payload) {
     const doc = this.store.get(id);
     if (this.db.prepare("SELECT id FROM jobs WHERE document_id=? AND state='running'").get(id)) throw new Error('请先暂停翻译再重新解析。');
@@ -121,7 +120,7 @@ class BilingualService {
     this.db.exec('BEGIN IMMEDIATE');
     try{this.db.prepare('INSERT OR REPLACE INTO reader_positions VALUES (?,?,?)').run(id,blockID || null,mode);this.db.prepare('INSERT OR REPLACE INTO reading_offsets VALUES (?,?,?)').run(id,blockID||null,offset);this.db.exec('COMMIT');}catch(e){this.db.exec('ROLLBACK');throw e;}
   }
-  fingerprint(config,workflow) { const base=hash([config.provider,config.baseURL,config.executable,config.model,PROMPT_VERSION]);return workflow?hash([base,workflow,config.vision!==false]):base; }
+  fingerprint(config,workflow) { const base=hash([config.provider,config.baseURL,config.executable,config.model,...(config.protocol&&config.protocol!=='chat'?[config.protocol]:[]),PROMPT_VERSION]);return workflow?hash([base,workflow,config.vision!==false]):base; }
   cacheKey(b,provider) { return hash([b.id,b.source_hash,provider,'zh-CN',PROMPT_VERSION]); }
   start(id, range) {
     if(['pages-1','pages-2','pages-3'].includes(range?.pipeline))return this.pages.start(id,range.refine===true);
@@ -230,36 +229,24 @@ class BilingualService {
     }
   }
   async translate(b,config,signal) {
-    if (config.provider==='codex') return runCodex(config,b,signal);
-    const row=this.db.prepare('SELECT secret FROM model_settings WHERE id=1').get();
-    const key=row?.secret ? this.encryption.decryptString(Buffer.from(row.secret)) : '';
-    const response=await fetch(`${config.baseURL}/chat/completions`, { method:'POST', redirect:'error', signal:AbortSignal.any([signal,AbortSignal.timeout(90000)]), headers:{'Content-Type':'application/json', ...(key?{Authorization:`Bearer ${key}`}:{})}, body:JSON.stringify({model:config.model,messages:[{role:'system',content:instruction},{role:'user',content:JSON.stringify(Array.isArray(b)?{blocks:b.map(v=>({id:v.id,source:v.text}))}:{id:b.id,source:b.text})}]}) });
-    if (!response.ok) { await response.body?.cancel(); const e=new Error(); e.pauseQueue=[401,403,404,429].includes(response.status);e.safeMessage=`API 返回 HTTP ${response.status}；请检查认证、额度和模型。`; throw e; }
-    let bytes=0, body=''; const decoder=new TextDecoder();
-    for await (const chunk of response.body) { bytes+=chunk.length; if(bytes>1_000_000) throw new Error('Response too large'); body+=decoder.decode(chunk,{stream:true}); }
-    body+=decoder.decode();
-    const answer=JSON.parse(body).choices?.[0];
-    if (!answer || answer.finish_reason!=='stop') throw new Error('Incomplete response');
-    return JSON.parse(answer.message.content);
+    if(config.provider==='codex')return runCodex(config,b,signal);
+    const prompt=Array.isArray(b)?{blocks:b.map(v=>({id:v.id,source:v.text}))}:{id:b.id,source:b.text};
+    return this.requestStructured(config,{instruction,prompt,images:[]},signal);
   }
   async requestStructured(config,request,signal){
     if(config.provider==='codex')return runCodex(config,null,signal,request);
+    if(config.provider!=='api')return require('./model-cli.cjs').runCLI(config,request,signal);
     const row=this.db.prepare('SELECT secret FROM model_settings WHERE id=1').get(),key=row?.secret?this.encryption.decryptString(Buffer.from(row.secret)):'';
-    const content=[{type:'text',text:JSON.stringify(request.prompt)}];
-    for(const file of request.images)content.push({type:'image_url',image_url:{url:'data:image/jpeg;base64,'+(await fs.readFile(file)).toString('base64')}});
-    let response;
-    for(let attempt=0;attempt<3;attempt++){
-      response=await fetch(`${config.baseURL}/chat/completions`,{method:'POST',redirect:'error',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)]),headers:{'Content-Type':'application/json',...(key?{Authorization:`Bearer ${key}`}:{})},body:JSON.stringify({model:config.model,messages:[{role:'system',content:request.instruction+(request.schema?'\nRequired JSON Schema:\n'+JSON.stringify(request.schema):'')},{role:'user',content:request.images.length?content:JSON.stringify(request.prompt)}]})});
-      if(![429,500,502,503,504].includes(response.status)||attempt===2)break;
+    const images=await Promise.all((request.images||[]).map(async f=>(await fs.readFile(f)).toString('base64')));
+    const retryFetch=async(url,options)=>{for(let attempt=0;attempt<3;attempt++){
+      const response=await (this.apiFetch||fetch)(url,options);
+      if(![429,500,502,503,504].includes(response.status)||attempt===2)return response;
       const retry=Number(response.headers.get('retry-after')),ms=Number.isFinite(retry)&&retry>0?Math.min(30000,retry*1000):2000*(attempt+1);
       await response.body?.cancel();
       await new Promise((resolve,reject)=>{const abort=()=>{clearTimeout(timer);reject(new Error('Interrupted'));},timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},ms);signal.addEventListener('abort',abort,{once:true});if(signal.aborted)abort();});
-    }
-    if(!response.ok){await response.body?.cancel();const e=new Error(`API 返回 HTTP ${response.status}。`);e.pauseQueue=[401,403,404,429].includes(response.status);e.safeMessage=e.message;throw e;}
-    let bytes=0,body='';const decoder=new TextDecoder();
-    for await(const chunk of response.body){bytes+=chunk.length;if(bytes>2_000_000)throw new Error('页面响应过大。');body+=decoder.decode(chunk,{stream:true});}body+=decoder.decode();
-    const answer=JSON.parse(body).choices?.[0];if(answer?.finish_reason!=='stop')throw new Error('页面结果被截断，未保存。');
-    return JSON.parse(answer.message.content);
+    }};
+    try {return JSON.parse(await require('./assistant-api.cjs').rawCompletion(config,key,request.instruction+(request.schema?'\nRequired JSON Schema:\n'+JSON.stringify(request.schema):''),request.prompt,signal,()=>{},retryFetch,images));}
+    catch(e){e.safeMessage=/^(API |密钥|服务|当前密钥|请核对|回答|连接提前)/.test(e.message)?e.message:'API 未返回有效结果，请检查模型或接口格式。';e.pauseQueue=true;throw e;}
   }
   async close() { this.closed=true; if(this.running) await this.stop(this.running); }
 }
@@ -281,7 +268,7 @@ async function runCodex(config,b,signal,request) {
     await new Promise((resolve,reject)=>{
       const child=spawn(config.executable,args,{cwd:dir,env,stdio:['pipe','pipe','pipe'],shell:false,detached:process.platform!=='win32'});
       let total=0, tool=false, pending='';
-      const kill=()=>{ try { if(process.platform!=='win32') process.kill(-child.pid,'SIGKILL'); else child.kill('SIGKILL'); } catch {} };
+      const kill=()=>{ try { if(process.platform!=='win32') process.kill(-child.pid,'SIGKILL'); else { spawn('taskkill.exe',['/pid',String(child.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'}).on('error',()=>child.kill('SIGKILL')); } } catch {} };
       let failure;
       const fail=error=>{failure ||= error;kill();};
       const abort=()=>fail(new Error('Interrupted'));

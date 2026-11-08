@@ -1,0 +1,8 @@
+import {useRef,useState} from 'react';
+import PaperChat from './PaperChat';
+import type {ChatFocus,AnnotationContext,AnnotationState,SelectionFragment} from './desktop';
+type Props={focusRequest?:number;automaticFocus:ChatFocus;collapsed:boolean;documentTitle:string;attachments:SelectionFragment[];onAttachments(f:SelectionFragment[]):void;onAddSelection():void;onSettings():void;documentID:string;state:AnnotationState;selection:SelectionFragment[];onState(s:AnnotationState):void;onClose():void;onLocate(c:AnnotationContext):void};
+export default function PaperChatPanel({collapsed,onClose,...chat}:Props){
+ const [width,setWidth]=useState(390),drag=useRef<{x:number;width:number}|null>(null);
+ return <aside hidden={collapsed} className="rp-annotation-panel rp-chat-sidebar" style={{width}} aria-label="AI 对话侧栏"><div className="rp-chat-resizer" role="separator" aria-label="调整 AI 侧栏宽度" aria-orientation="vertical" aria-valuemin={320} aria-valuemax={600} aria-valuenow={width} tabIndex={0} onPointerDown={e=>{drag.current={x:e.clientX,width};e.currentTarget.setPointerCapture(e.pointerId);e.preventDefault();}} onPointerMove={e=>{if(drag.current)setWidth(Math.max(320,Math.min(600,drag.current.width+drag.current.x-e.clientX)));}} onPointerUp={()=>{drag.current=null;}} onLostPointerCapture={()=>{drag.current=null;}} onDoubleClick={()=>setWidth(390)} onKeyDown={e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();setWidth(w=>Math.max(320,Math.min(600,w+(e.key==='ArrowLeft'?20:-20))));}}}/><header><b>问 AI</b><button aria-label="收起 AI 对话" onClick={onClose}>收起</button></header><PaperChat {...chat} onSaved={()=>{}}/></aside>;
+}

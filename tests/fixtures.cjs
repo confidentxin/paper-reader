@@ -1,12 +1,12 @@
 // Original deterministic PDF fixture: no external document content.
-function makePDF({ pages = 3, text = true, outline = true, extraLines = 0 } = {}) {
+function makePDF({ pages = 3, text = true, outline = true, extraLines = 0, semantic = false } = {}) {
   const objects = [];
   const add = value => { objects.push(value); return objects.length; };
   add(''); add('');
   const font = add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
   const pageIDs = [];
   for (let i = 1; i <= pages; i++) {
-    const extra = Array.from({length:extraLines},(_,line)=>`0 -40 Td (Additional reading paragraph ${i}.${line+1} with local evidence.) Tj`).join(' ');
+    const extra = Array.from({length:extraLines},(_,line)=>`0 -40 Td (${semantic&&i===1&&line<3?['Abstract','This abstract discusses transformer evidence.','1 Introduction'][line]:`Additional reading paragraph ${i}.${line+1} with local evidence.`}) Tj`).join(' ');
     const content = text ? `BT /F1 18 Tf 55 735 Td (Reader fixture page ${i}) Tj 0 -40 Td (Searchable transformer evidence ${i}) Tj ${extra} ET` : '0.8 0.9 0.7 rg 50 100 400 600 re f';
     const stream = add(`<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}\nendstream`);
     pageIDs.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${i % 2 ? 600 : 640} 800] /Resources << /Font << /F1 ${font} 0 R >> >> /Contents ${stream} 0 R >>`));

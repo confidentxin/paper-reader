@@ -51,7 +51,15 @@ else {
     });
     store = await new LibraryStore(app.getPath('userData')).open();
     bilingual = new BilingualService(store, safeStorage);
-    annotations = new (require('./annotations.cjs').AnnotationService)(store,bilingual);
+    bilingual.apiFetch=net.fetch.bind(net);
+    const assistant=new (require('./assistant-api.cjs').AssistantAPI)(store,bilingual,net.fetch.bind(net));
+    annotations = new (require('./annotations.cjs').AnnotationService)(store,bilingual,{assistant,onChange:documentID=>{if(win&&!win.isDestroyed())win.webContents.send('annotations:changed',{documentID});}});
+    register('assistant:config',()=>assistant.config());
+    register('assistant:presets',()=>assistant.presets());
+    register('assistant:save-config',input=>{if(annotations.pending.size)throw new Error('请先停止当前回答再修改助读设置。');return assistant.save(input);});
+    register('assistant:models',input=>assistant.models(input));
+    register('assistant:test',input=>assistant.test(input));
+    register('annotations:pdf-source', (id,input) => annotations.pdfSources.register(id,input));
     register('annotations:list', id => annotations.list(id));
     register('annotations:save', (id,input) => annotations.save(id,input));
     register('annotations:delete', (id,note) => annotations.remove(id,note));
@@ -65,7 +73,9 @@ else {
     });
     register('bilingual:config', () => bilingual.config());
     register('bilingual:save-config', input => bilingual.saveConfig(input));
-    register('bilingual:detect-cli', () => bilingual.detectCLI());
+    register('bilingual:detect-cli', provider => bilingual.detectCLI(provider));
+    register('bilingual:models', input => assistant.models(input,'translation'));
+    register('bilingual:test', input => assistant.test(input,'translation'));
     register('bilingual:snapshot', id => bilingual.snapshot(id));
     register('bilingual:parse', (id, payload) => bilingual.saveParse(id, payload));
     register('bilingual:page-image', (id, page, image) => bilingual.pages.saveAsset(id,page,image));

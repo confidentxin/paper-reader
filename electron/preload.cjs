@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('reader', {
+  annotationPDFSource: (id,input) => ipcRenderer.invoke('annotations:pdf-source',id,input),
+  assistantConfig: () => ipcRenderer.invoke('assistant:config'),
+  assistantPresets: () => ipcRenderer.invoke('assistant:presets'),
+  saveAssistantConfig: input => ipcRenderer.invoke('assistant:save-config',input),
+  assistantModels: input => ipcRenderer.invoke('assistant:models',input),
+  assistantTest: input => ipcRenderer.invoke('assistant:test',input),
+  onAnnotationChange: callback => {const listener=(_event,payload)=>callback(payload.documentID);ipcRenderer.on('annotations:changed',listener);return ()=>ipcRenderer.removeListener('annotations:changed',listener);},
   annotationList: id => ipcRenderer.invoke('annotations:list',id),
   annotationSave: (id,input) => ipcRenderer.invoke('annotations:save',id,input),
   annotationDelete: (id,note) => ipcRenderer.invoke('annotations:delete',id,note),
@@ -8,7 +15,9 @@ contextBridge.exposeInMainWorld('reader', {
   annotationExport: id => ipcRenderer.invoke('annotations:export',id),
   modelConfig: () => ipcRenderer.invoke('bilingual:config'),
   saveModelConfig: input => ipcRenderer.invoke('bilingual:save-config', input),
-  detectCLI: () => ipcRenderer.invoke('bilingual:detect-cli'),
+  detectCLI: provider => ipcRenderer.invoke('bilingual:detect-cli',provider),
+  translationModels: input => ipcRenderer.invoke('bilingual:models',input),
+  translationTest: input => ipcRenderer.invoke('bilingual:test',input),
   snapshot: id => ipcRenderer.invoke('bilingual:snapshot', id),
   saveParse: (id, payload) => ipcRenderer.invoke('bilingual:parse', id, payload),
   savePageImage: (id, page, image) => ipcRenderer.invoke('bilingual:page-image', id, page, image),

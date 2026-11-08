@@ -2,12 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy, PDFPageProxy, RenderTask } from 'pdfjs-dist';
 import { TextLayer } from 'pdfjs-dist';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import type { Analysis, AnnotationContext, AnnotationState, SelectionFragment, ContentBlock, ReadingMode, DocumentChange, DocumentRecord } from './desktop';
+import type { Analysis, Annotation, AnnotationContext, AnnotationState, SelectionFragment, ContentBlock, ReadingMode, DocumentChange, DocumentRecord } from './desktop';
 import { loadPDF, pdfError } from './pdf';
 import { readingBlocks } from './bilingual/reading';
 import AnnotationPanel from './AnnotationPanel';
+import PaperChatPanel from './PaperChatPanel';
 import ParallelReader from './ParallelReader';
+import PdfSelection from './PdfSelection';
 import ModelSettings from './ModelSettings';
+import AssistantSettings from './AssistantSettings';
 import { pageImage, parsePDFPage, PARSER_VERSION } from './bilingual/parsePDF';
 import type { Region } from './bilingual/parser';
 import type { ReadingPage } from './bilingual/presentation';
@@ -21,20 +24,30 @@ export default function PdfReader({ doc, onBack, save, registerFlush }: { doc: D
   const [mode, setMode] = useState<ReadingMode>('original');
   const [navigation,setNavigation]=useState(0);
   const [analysis,setAnalysis]=useState<Analysis|null>(null), [anchor,setAnchor]=useState<string|null>(null), [showModel,setShowModel]=useState(false);
-  const [annotationState,setAnnotationState]=useState<AnnotationState>({contexts:[],notes:[],turns:[]}),[selection,setSelection]=useState<SelectionFragment[]>([]),[selectionError,setSelectionError]=useState(''),[showAnnotations,setShowAnnotations]=useState(true);
-  const [chatAttachments,setChatAttachments]=useState<SelectionFragment[]>([]),[chatFocus,setChatFocus]=useState(0);
-  function addSelectionToChat(){if(!selection.length)return;setChatAttachments(old=>{const next=[...old];for(const f of selection)if(!next.some(x=>x.block_id===f.block_id&&x.side===f.side&&x.version===f.version&&x.start===f.start&&x.end===f.end))next.push(f);return next;});setShowAnnotations(true);setChatFocus(n=>n+1);}
+  const [annotationState,setAnnotationState]=useState<AnnotationState>({contexts:[],notes:[],turns:[]}),[selection,setSelection]=useState<SelectionFragment[]>([]),[selectionError,setSelectionError]=useState(''),[showAnnotations,setShowAnnotations]=useState(false),[showChat,setShowChat]=useState(true);
+  const [chatAttachments,setChatAttachments]=useState<SelectionFragment[]>([]);
+  const [showAssistant,setShowAssistant]=useState(false);
+  const [chatRequest,setChatRequest]=useState(0);
+  function attachSelection(fragments:SelectionFragment[]){if(!fragments.length)return;setChatAttachments(old=>{const next=[...old];for(const f of fragments)if(!next.some(x=>x.block_id===f.block_id&&x.side===f.side&&x.version===f.version&&x.start===f.start&&x.end===f.end))next.push(f);return next;});setShowChat(true);setChatRequest(n=>n+1);}
+  function addSelectionToChat(){attachSelection(selection);}
+  const [noteRequest,setNoteRequest]=useState(0);
+  function noteSelection(fragments:SelectionFragment[]){setSelection(fragments);setNoteRequest(n=>n+1);setShowAnnotations(true);}
+  async function highlightSelection(fragments:SelectionFragment[],color:Annotation['color']){setAnnotationState(await window.reader!.annotationSave(doc.id,{fragments,color,note:''}));}
+  async function changeHighlight(id:string,color:Annotation['color']){const n=annotationState.notes.find(n=>n.id===id);if(!n)throw new Error('标注不存在，请重新选择。');setAnnotationState(await window.reader!.annotationSave(doc.id,{id,color,note:n.note,highlighted:true}));}
+  async function removeHighlight(id:string){const n=annotationState.notes.find(n=>n.id===id);if(!n)throw new Error('标注不存在，请重新选择。');setAnnotationState(n.note.trim()||n.kind==='ai'?await window.reader!.annotationSave(doc.id,{id,color:n.color,note:n.note,highlighted:false}):await window.reader!.annotationDelete(doc.id,id));}
   const [chatSide,setChatSide]=useState<'en'|'zh'>('en');
   const contextAtAnchor=annotationState.contexts.find(c=>c.block_id===anchor&&c.side===(mode==='focus'?'zh':chatSide))||(!anchor?annotationState.contexts.find(c=>c.page===page&&c.side===(mode==='focus'?'zh':chatSide)):undefined);
   const automaticChatFocus={page:mode==='original'?page:contextAtAnchor?.page||page,parse_id:analysis?.parse?.id,side:mode==='focus'?'zh' as const:chatSide,...(mode!=='original'&&contextAtAnchor?{block_id:contextAtAnchor.block_id}:{})};
   const annotationRevision=analysis?.parse?.id+'|'+analysis?.reading?.blocks.map(b=>b.id+':'+b.translation).join('|')+'|'+analysis?.translations.map(t=>t.cache_key).join('|');
   useEffect(()=>{let alive=true;window.reader!.annotationList(doc.id).then(s=>{if(alive)setAnnotationState(s);}).catch(e=>setTaskError(pdfError(e)));return()=>{alive=false;};},[doc.id,annotationRevision]);
+  useEffect(()=>{let alive=true;const unsubscribe=window.reader!.onAnnotationChange(id=>{if(id===doc.id)window.reader!.annotationList(doc.id).then(s=>{if(alive)setAnnotationState(s);}).catch(()=>{});});return()=>{alive=false;unsubscribe();};},[doc.id]);
   const qaRunning=annotationState.turns.some(t=>t.state==='running');
   useEffect(()=>{if(!qaRunning)return;let alive=true;const timer=setInterval(()=>{window.reader!.annotationList(doc.id).then(s=>{if(alive)setAnnotationState(s);}).catch(e=>{if(alive)setTaskError(pdfError(e));});},900);return()=>{alive=false;clearInterval(timer);};},[doc.id,qaRunning]);
   function locateAnnotation(c:AnnotationContext){
+    if(c.source_mode==='pdf'){changeMode('original');latest.current={page:c.page,offset:Math.max(0,(c.regions[0]?.y||0)-.05),zoom};setOffset(latest.current.offset);setPage(c.page);if(mode==='original'&&page===c.page&&scroll.current&&pageBox.current)scroll.current.scrollTop=latest.current.offset*pageBox.current.clientHeight;setReady(true);setTaskError('');return;}
     if(c.source_mode==='paper'&&analysis?.parse?.id===c.parse_id){const b=analysis.parse.pages.flatMap(p=>p.blocks).find(b=>b.id===c.block_id);if(b){selectBlock(b,true);setTaskError('');return;}}
 
-    const current=annotationState.contexts.find(x=>x.block_id===c.block_id&&x.side===c.side),b=readingBlocks(analysis).find(b=>b.id===c.block_id);
+    const current=annotationState.contexts.find(x=>x.block_id===c.block_id&&x.side===c.side&&x.version===c.version),b=readingBlocks(analysis).find(b=>b.id===c.block_id);
     if(current?.version===c.version&&b){const next=c.side==='en'?'dual':mode==='original'?'focus':mode;contentPosition.current.mode=next;setMode(next);selectBlock(b);setNavigation(n=>n+1);setTaskError('');}
     else {changeMode('original');go(c.page);setTaskError('内容版本已变化，批注保留待核对；仅打开保存的 PDF 来源页。');}
   }
@@ -88,7 +101,7 @@ export default function PdfReader({ doc, onBack, save, registerFlush }: { doc: D
     if(startBusy.current||parseBusy.current||!pdf)return;startBusy.current=true;setStartingFull(true);setTaskError('');
     try{
       const config=await window.reader!.modelConfig();
-      if(!config.model||(config.provider==='codex'?!config.executable:!config.baseURL)){setShowModel(true);setTaskError('请先保存模型设置，再开始全文翻译。');return;}
+      if(!config.model||(config.provider!=='api'?!config.executable:!config.baseURL)){setShowModel(true);setTaskError('请先保存模型设置，再开始全文翻译。');return;}
       let current=analysis;
       if(!current?.parse||current.parse.pages.some(p=>p.presentation_version!==PRESENTATION_VERSION))current=await parseDocument()||null;
       if(!current?.parse||parseCancel.current)return;
@@ -125,6 +138,7 @@ export default function PdfReader({ doc, onBack, save, registerFlush }: { doc: D
   const [saveState, setSaveState] = useState('位置已保存'), [ready, setReady] = useState(false);
   const [width, setWidth] = useState(800), [rendered, setRendered] = useState(false), [retry, setRetry] = useState(0);
   const [renderedKey, setRenderedKey] = useState('');
+  const [pdfContext,setPdfContext]=useState<AnnotationContext|null>(null);
   const renderKey = `${page}|${zoom}|${width}|${mode}|${retry}`;
   const isRendered = rendered && renderedKey === renderKey;
   const scroll = useRef<HTMLDivElement>(null), pageBox = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null), layerBox = useRef<HTMLDivElement>(null);
@@ -175,7 +189,7 @@ export default function PdfReader({ doc, onBack, save, registerFlush }: { doc: D
   useEffect(() => {
     if (!pdf || mode !== 'original') return;
     let cancelled = false, renderTask: RenderTask | undefined, textLayer: TextLayer | undefined, loadedPage: PDFPageProxy | undefined;
-    setRendered(false); setError(''); setNotice('');
+    setRendered(false);setPdfContext(null); setError(''); setNotice('');
     pdf.getPage(page).then(async pdfPage => {
       loadedPage = pdfPage;
       if (cancelled || !canvas.current || !pageBox.current || !layerBox.current) return;
@@ -197,6 +211,12 @@ export default function PdfReader({ doc, onBack, save, registerFlush }: { doc: D
       if (!text.items.some(item => 'str' in item && item.str.trim())) setNotice('此页没有可提取文字，可能是扫描页；可查看原页，OCR 尚未接入。');
       textLayer = new TextLayer({ textContentSource: text, container: layerBox.current!, viewport });
       await Promise.all([renderTask.promise, textLayer.render()]);
+      if(cancelled)return;
+      try{const items=text.items.filter((i):i is Extract<typeof i,{str:string}>=>'str' in i),divs=textLayer.textDivs;let start=0;
+        if(divs.length!==items.length)throw new Error('本页文字层未能准确对应，暂不能标注。');
+        items.forEach((item,i)=>{if(divs[i].textContent!==item.str)throw new Error('本页文字层未能准确对应，暂不能标注。');divs[i].dataset.pdfStart=String(start);start+=item.str.length+(item.hasEOL?1:0);});
+        const c=await window.reader!.annotationPDFSource(doc.id,{page,items:items.map(i=>({text:i.str,eol:!!i.hasEOL}))});if(!cancelled){const annotations=await window.reader!.annotationList(doc.id);if(!cancelled){setPdfContext(c);setAnnotationState(annotations);}}
+      }catch(e){if(!cancelled)setNotice(pdfError(e));}
       if (cancelled) return;
       if (scroll.current) scroll.current.scrollTop = latest.current.offset * viewport.height;
       setRenderedKey(renderKey); setRendered(true); setReady(true);
@@ -243,16 +263,17 @@ export default function PdfReader({ doc, onBack, save, registerFlush }: { doc: D
     } catch (e) { if (version === searchVersion.current) setSearchError(`搜索未完成：${pdfError(e)}`); }
     finally { if (version === searchVersion.current) setSearching(false); }
   }
-  const translation=<ParallelReader onContextRead={(_b,side)=>setChatSide(side)} canAddSelection={!!selection.length} onAddSelection={addSelectionToChat} annotationState={annotationState} onSelection={(f,error)=>{setSelection(f);setSelectionError(error||'');}} analysis={analysis} pdf={pdf} page={page} anchor={anchor} fraction={contentPosition.current.offset} navigation={navigation} mode={mode} onRead={(b,f)=>{const r=b.regions[Math.min(b.regions.length-1,Math.floor(f*b.regions.length))];contentPosition.current.block=b.id;contentPosition.current.offset=f;latest.current={page:r.page,offset:r.y,zoom};setPage(r.page);setAnchor(b.id);clearTimeout(readingSave.current);readingSave.current=setTimeout(()=>void persist(),300);}} onSource={b=>selectBlock(b,true)} onSettings={()=>setShowModel(true)} onResume={id=>void translationAction(()=>window.reader!.resumeTranslation(id))} onStop={(id,cancel)=>void translationAction(()=>window.reader!.stopTranslation(id,cancel))} onRefine={()=>void startFullTranslation(true)}/>;
+  const translation=<ParallelReader onHighlight={highlightSelection} onChangeHighlight={changeHighlight} onRemoveHighlight={removeHighlight} onNote={noteSelection} onAsk={attachSelection} onAnnotateSelection={()=>setShowAnnotations(true)} onContextRead={(_b,side)=>setChatSide(side)} canAddSelection={!!selection.length} onAddSelection={addSelectionToChat} annotationState={annotationState} onSelection={(f,error)=>{setSelection(f);setSelectionError(error||'');}} analysis={analysis} pdf={pdf} page={page} anchor={anchor} fraction={contentPosition.current.offset} navigation={navigation} mode={mode} onRead={(b,f)=>{const r=b.regions[Math.min(b.regions.length-1,Math.floor(f*b.regions.length))];contentPosition.current.block=b.id;contentPosition.current.offset=f;latest.current={page:r.page,offset:r.y,zoom};setPage(r.page);setAnchor(b.id);clearTimeout(readingSave.current);readingSave.current=setTimeout(()=>void persist(),300);}} onSource={b=>selectBlock(b,true)} onSettings={()=>setShowModel(true)} onResume={id=>void translationAction(()=>window.reader!.resumeTranslation(id))} onStop={(id,cancel)=>void translationAction(()=>window.reader!.stopTranslation(id,cancel))} onRefine={()=>void startFullTranslation(true)}/>;
   return <div className="rp-reader">
     <header className="rp-header"><button className="icon-btn" aria-label="返回文献库" onClick={async () => { try { parseCancel.current=true;await persist(); onBack(); } catch { setSaveState('保存失败，请重试'); } }}><ArrowLeft size={20} /></button><div className="rp-reader-title"><b>{doc.title}</b><small>本地 PDF · {doc.pages} 页 · 原始文件副本</small></div><div className="mode-switch">{([['original', 'PDF 原稿'], ['dual', '双语对照'], ['focus', '中文精读']] as const).map(([m, name]) => <button key={m} className={mode === m ? 'selected' : ''} onClick={() => changeMode(m)}>{name}</button>)}</div></header>
-    <div className="rp-tools"><button className="primary" disabled={!pdf||startingFull||parsing||!!analysis?.jobs.some(j=>j.state==='running')} onClick={()=>void startFullTranslation()}>{parsing?`解析全文 ${parseProgress}/${doc.pages}`:imageProgress?`准备原页图 ${imageProgress}/${doc.pages}`:startingFull?'正在准备全文…':'全文翻译'}</button>{analysis?.jobs.find(j=>j.state==='running')&&<button className="secondary" onClick={()=>void translationAction(()=>window.reader!.stopTranslation(analysis.jobs.find(j=>j.state==='running')!.id))}>暂停全文翻译</button>}{(parsing||startingFull)&&<button className="secondary" onClick={()=>{parseCancel.current=true;}}>取消准备</button>}{analysis?.parse&&!parsing&&!startingFull&&!analysis.jobs.some(j=>j.state==='running')&&<button className="secondary" onClick={()=>void parseDocument().catch(()=>{})}>重新解析</button>}<button className="secondary" onClick={() => setShowNav(!showNav)}><List size={15} />目录与搜索</button><button className="secondary" onClick={()=>setShowAnnotations(!showAnnotations)}>批注与 AI{annotationState.notes.length?` · ${annotationState.notes.length}`:''}</button><div className="rp-paging"><button className="icon-btn" aria-label="上一页" disabled={page <= 1} onClick={() => go(page - 1)}><ChevronLeft size={19} /></button><form onSubmit={e => { e.preventDefault(); go(Number(pageInput)); }}><input aria-label="页码" value={pageInput} onChange={e => setPageInput(e.target.value)} onBlur={() => go(Number(pageInput))} inputMode="numeric" /><span> / {doc.pages} 页</span></form><button className="icon-btn" aria-label="下一页" disabled={page >= doc.pages} onClick={() => go(page + 1)}><ChevronRight size={19} /></button></div>{mode==='original'&&<label>缩放 <select aria-label="PDF 缩放" value={zoom} onChange={e => { latest.current.zoom = e.target.value; setZoom(e.target.value); }}>{['fit', '0.5', '0.75', '1', '1.25', '1.5', '2', '3'].map(v => <option key={v} value={v}>{v === 'fit' ? '适合宽度' : `${Number(v) * 100}%`}</option>)}</select></label>}</div>
+    <div className="rp-tools"><button className="primary" disabled={!pdf||startingFull||parsing||!!analysis?.jobs.some(j=>j.state==='running')} onClick={()=>void startFullTranslation()}>{parsing?`解析全文 ${parseProgress}/${doc.pages}`:imageProgress?`准备原页图 ${imageProgress}/${doc.pages}`:startingFull?'正在准备全文…':'全文翻译'}</button>{analysis?.jobs.find(j=>j.state==='running')&&<button className="secondary" onClick={()=>void translationAction(()=>window.reader!.stopTranslation(analysis.jobs.find(j=>j.state==='running')!.id))}>暂停全文翻译</button>}{(parsing||startingFull)&&<button className="secondary" onClick={()=>{parseCancel.current=true;}}>取消准备</button>}{analysis?.parse&&!parsing&&!startingFull&&!analysis.jobs.some(j=>j.state==='running')&&<button className="secondary" onClick={()=>void parseDocument().catch(()=>{})}>重新解析</button>}<button className="secondary" onClick={() => setShowNav(!showNav)}><List size={15} />目录与搜索</button><button className="secondary" onClick={()=>setShowAnnotations(!showAnnotations)}>批注{annotationState.notes.length?` · ${annotationState.notes.length}`:''}</button><button className="secondary" aria-pressed={showChat} onClick={()=>setShowChat(v=>!v)}>问 AI</button><div className="rp-paging"><button className="icon-btn" aria-label="上一页" disabled={page <= 1} onClick={() => go(page - 1)}><ChevronLeft size={19} /></button><form onSubmit={e => { e.preventDefault(); go(Number(pageInput)); }}><input aria-label="页码" value={pageInput} onChange={e => setPageInput(e.target.value)} onBlur={() => go(Number(pageInput))} inputMode="numeric" /><span> / {doc.pages} 页</span></form><button className="icon-btn" aria-label="下一页" disabled={page >= doc.pages} onClick={() => go(page + 1)}><ChevronRight size={19} /></button></div>{mode==='original'&&<label>缩放 <select aria-label="PDF 缩放" value={zoom} onChange={e => { latest.current.zoom = e.target.value; setZoom(e.target.value); }}>{['fit', '0.5', '0.75', '1', '1.25', '1.5', '2', '3'].map(v => <option key={v} value={v}>{v === 'fit' ? '适合宽度' : `${Number(v) * 100}%`}</option>)}</select></label>}</div>
     {taskError&&<div className="rp-page-notice rp-error-text" role="alert">{taskError}</div>}
     <div className="rp-reading-layout">{showNav && <aside className="rp-nav"><form className="rp-search" onSubmit={e => { e.preventDefault(); void findText(); }}><input aria-label="搜索 PDF 全文" placeholder="搜索 PDF 全文" value={search} onChange={e => { setSearch(e.target.value); searchVersion.current++; setSearching(false); setSearched(false); setHits([]); }} /><button className="icon-btn" aria-label="执行全文搜索" disabled={!pdf || !search.trim()}><Search size={17} /></button></form>{searching && <p className="rp-hint">搜索中 · {searchProgress}/{doc.pages} 页 <button onClick={() => { searchVersion.current++; setSearching(false); }}>取消</button></p>}{searched && <p className="rp-hint">{hits.length ? `${hits.length} 页包含匹配文字（每页显示首处）` : '未找到匹配文字；扫描页需 OCR。'}</p>}{searchError && <p role="alert" className="rp-error">{searchError}</p>}{hits.map(h => <button className="rp-hit" key={h.page} onClick={() => go(h.page)}><b>第 {h.page} 页</b><span>{h.excerpt}</span></button>)}<h3>文档目录</h3>{!pdf ? <p className="rp-hint">正在读取…</p> : outline.length ? outlineItems(outline) : <p className="rp-hint">此 PDF 没有内嵌目录，可通过页码或全文搜索导航。</p>}</aside>}
       <main className={`rp-panes rp-${mode}`}>{mode === 'original' && <section className="rp-pdf-pane"><div className="rp-pane-heading" data-render-key={renderKey} data-completed-key={renderedKey}><FileText size={14} />真实 PDF · 第 {page} 页<span>{!pdf ? '正在打开…' : !isRendered && !error ? '正在渲染…' : error ? '页面不可用' : '可选择与复制文字'}</span></div>{notice && <div className="rp-page-notice">{notice}</div>}{error && <div role="alert" className="rp-error">{error}<button className="secondary" onClick={() => { setError(''); setRetry(v => v + 1); }}>重试此页</button></div>}
         <div className="rp-pdf-scroll" ref={scroll} onScroll={e => { if (!isRendered || !pageBox.current) return; const value = Math.max(0, Math.min(1, e.currentTarget.scrollTop / pageBox.current.clientHeight)); latest.current = { page, offset: value, zoom }; setOffset(value);
         }}><div className="rp-page" ref={pageBox} data-page={page}><canvas ref={canvas} aria-label={`PDF 第 ${page} 页`} /><div className="textLayer" ref={layerBox} />{[...sourceBlocks,...(analysis?.parse?.pages.flatMap(p=>p.blocks)||[])].find(b=>b.id===anchor && b.confidence==='geometry')?.regions.filter(r=>r.page===page).map((r,i)=><div key={i} className="rp-region" style={{left:`${r.x*100}%`,top:`${r.y*100}%`,width:`${r.width*100}%`,height:`${r.height*100}%`}}/>)}</div></div>
-      </section>}{mode !== 'original' && translation}</main><AnnotationPanel automaticFocus={automaticChatFocus} collapsed={!showAnnotations} documentTitle={doc.title} attachments={chatAttachments} onAttachments={setChatAttachments} chatFocus={chatFocus} onAddSelection={addSelectionToChat} onSettings={()=>setShowModel(true)} documentID={doc.id} state={annotationState} selection={selection} selectionError={selectionError} onState={setAnnotationState} onClose={()=>setShowAnnotations(false)} onLocate={locateAnnotation}/>
-    </div>{showModel&&<ModelSettings onClose={()=>setShowModel(false)}/>}<footer className="rp-reader-footer"><span>来源可核对 · 译文与原始 PDF 分开保存</span><button onClick={() => void persist()} className={saveState.includes('失败') ? 'rp-error-text' : ''}>{saveState}{saveState.includes('失败') ? ' · 点击重试' : ''}</button><span>第 {page} / {doc.pages} 页</span></footer>
+      {isRendered&&pdfContext&&<PdfSelection root={layerBox} pageBox={pageBox} context={pdfContext} state={annotationState} onSelection={(f,error)=>{setSelection(f);setSelectionError(error||'');}} onHighlight={highlightSelection} onNote={noteSelection} onAsk={attachSelection} onChangeHighlight={changeHighlight} onRemoveHighlight={removeHighlight}/>}</section>}{mode !== 'original' && translation}</main><PaperChatPanel focusRequest={chatRequest} automaticFocus={automaticChatFocus} collapsed={!showChat} documentTitle={doc.title} attachments={chatAttachments} onAttachments={setChatAttachments} onAddSelection={addSelectionToChat} onSettings={()=>setShowAssistant(true)} documentID={doc.id} state={annotationState} selection={selection} onState={setAnnotationState} onClose={()=>setShowChat(false)} onLocate={locateAnnotation}/><AnnotationPanel noteRequest={noteRequest} open={showAnnotations} documentID={doc.id} state={annotationState} selection={selection} selectionError={selectionError} onState={setAnnotationState} onClose={()=>setShowAnnotations(false)} onLocate={locateAnnotation}/>
+
+    </div>{showAssistant&&<AssistantSettings onClose={()=>setShowAssistant(false)}/>} {showModel&&<ModelSettings onClose={()=>setShowModel(false)}/>}<footer className="rp-reader-footer"><span>来源可核对 · 译文与原始 PDF 分开保存</span><button onClick={() => void persist()} className={saveState.includes('失败') ? 'rp-error-text' : ''}>{saveState}{saveState.includes('失败') ? ' · 点击重试' : ''}</button><span>第 {page} / {doc.pages} 页</span></footer>
   </div>;
 }

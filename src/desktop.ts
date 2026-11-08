@@ -7,14 +7,23 @@ export type DocumentChange = Partial<Pick<DocumentRecord, 'title' | 'category' |
 export type DataInfo = { directory: string; version: string; electron: string; node: string };
 export interface DesktopBridge {
   annotationList(id:string):Promise<AnnotationState>;
-  annotationSave(id:string,input:{id?:string;turn_id?:string;fragments?:SelectionFragment[];color:string;note:string}):Promise<AnnotationState>;
+  annotationPDFSource(id:string,input:{page:number;items:{text:string;eol:boolean}[]}):Promise<AnnotationContext>;
+  annotationSave(id:string,input:{id?:string;turn_id?:string;fragments?:SelectionFragment[];color:string;note:string;highlighted?:boolean}):Promise<AnnotationState>;
   annotationDelete(id:string,note:string):Promise<AnnotationState>;
   annotationAsk(id:string,input:{mode?:'paper-chat';contextMode?:'standard'|'whole';focus?:ChatFocus|null;question:string;fragments?:SelectionFragment[];retry?:string}):Promise<string>;
   annotationCancel(id:string,turn:string):Promise<void>;
   annotationExport(id:string):Promise<boolean>;
+  assistantConfig():Promise<AssistantConfig>;
+  assistantPresets():Promise<AssistantPreset[]>;
+  saveAssistantConfig(input:AssistantConfig):Promise<AssistantConfig>;
+  assistantModels(input:AssistantConfig):Promise<string[]>;
+  assistantTest(input:AssistantConfig):Promise<{ok:boolean;model:string}>;
+  onAnnotationChange(callback:(documentID:string)=>void):()=>void;
   modelConfig(): Promise<ModelConfig>;
   saveModelConfig(input: ModelConfig): Promise<ModelConfig>;
-  detectCLI(): Promise<string>;
+  translationModels(input: ModelConfig): Promise<string[]>;
+  translationTest(input: ModelConfig): Promise<{ok:boolean;model:string}>;
+  detectCLI(provider?:'codex'|'claude'|'gemini'): Promise<string>;
   snapshot(id: string): Promise<Analysis>;
   saveParse(id: string, payload: { version: string; pages: import('./bilingual/presentation').ReadingPage[] }): Promise<Analysis>;
   savePageImage(id: string, page: number, image: string): Promise<void>;
@@ -37,8 +46,10 @@ export interface DesktopBridge {
 }
 declare global { interface Window { reader?: DesktopBridge } }
 export type ReadingMode = 'original' | 'dual' | 'focus';
-export type ModelConfig = { provider: 'api' | 'codex'; model: string; baseURL: string; executable: string; hasKey?: boolean; key?: string; clearKey?: boolean; vision?: boolean; workflow?: string };
-export type ContentBlock = import('./bilingual/presentation').VisualBlock & { id: string; source_hash: string; translation?: string; semanticType?: string; location?: string; alignment?: {source:string;translation:string}[]; latex?: string; equation_number?: string; continues_previous?: boolean };
+export type AssistantConfig={mode:'inherit'|'api'|'cli';provider?:'api'|'codex'|'claude'|'gemini';executable?:string;preset?:string;baseURL?:string;model?:string;protocol?:'chat'|'responses'|'anthropic';hasKey?:boolean;key?:string;clearKey?:boolean};
+export type AssistantPreset={id:string;name:string;group:string;baseURL:string;protocol:'chat'|'responses'|'anthropic';note:string};
+export type ModelConfig = { provider: 'api' | 'codex' | 'claude' | 'gemini'; preset?:string; protocol?:'chat'|'responses'|'anthropic'; model: string; baseURL: string; executable: string; hasKey?: boolean; key?: string; clearKey?: boolean; vision?: boolean; workflow?: string };
+export type ContentBlock = import('./bilingual/presentation').VisualBlock & { id: string; source_hash: string; translation?: string; semanticType?: string; paper_role?:string; role_origin?:string; location?: string; alignment?: {source:string;translation:string}[]; latex?: string; equation_number?: string; continues_previous?: boolean };
 export type Analysis = {
   assets: number[];
   reading: {version:string;job_id:string;pages:{page:number;blocks:ContentBlock[];warnings:string[]}[];blocks:ContentBlock[];glossary:{source:string;translation:string}[]}|null;
@@ -48,12 +59,12 @@ export type Analysis = {
   position: { block_id: string | null; mode: ReadingMode; offset: number };
 };
 
-export type AnnotationContext={source_mode?:'paper';block_id:string;side:'en'|'zh';language:'en'|'zh';full:string;version:string;parse_id:string;page:number;source_order?:number;regions:import('./bilingual/parser').Region[];source_hash:string;original:string};
+export type AnnotationContext={source_mode?:'paper'|'pdf';text_format?:'math-1';block_id:string;side:'en'|'zh';language:'en'|'zh'|'original';full:string;version:string;parse_id:string;page:number;source_order?:number;regions:import('./bilingual/parser').Region[];source_hash:string;original:string};
 export type SelectionFragment=AnnotationContext&{start:number;end:number;quote:string;prefix?:string;suffix?:string;segments?:number[]|null;status?:'exact'|'review';current_block?:string|null};
 export type CitationSource=AnnotationContext&{id:string;document_id:string;role:string;content:string};
-export type QATurn={mode?:'paper-chat';scope?:PaperScope;id:string;document_id:string;question:string;fragments:SelectionFragment[];sources:CitationSource[];state:'running'|'failed'|'cancelled'|'completed';answer:string;citations:{source_id:string;document_id:string}[];error:string;provider:string;model:string;created_at:string};
-export type Annotation={id:string;document_id:string;kind:'ai'|'user';note:string;color:'yellow'|'green'|'pink';fragments:SelectionFragment[];created_at:string;updated_at:string;ai?:Pick<QATurn,'question'|'answer'|'citations'|'sources'|'provider'|'model'>&{turn_id:string}};
+export type QATurn={mode?:'paper-chat';scope?:PaperScope;id:string;document_id:string;question:string;fragments:SelectionFragment[];sources:CitationSource[];state:'running'|'failed'|'cancelled'|'completed';answer:string;draft_answer?:string;citations:{source_id:string;document_id:string}[];error:string;provider:string;model:string;created_at:string};
+export type Annotation={id:string;document_id:string;kind:'ai'|'user';note:string;color:'yellow'|'green'|'pink';highlighted?:boolean;fragments:SelectionFragment[];created_at:string;updated_at:string;ai?:Pick<QATurn,'question'|'answer'|'citations'|'sources'|'provider'|'model'>&{turn_id:string}};
 export type ChatFocus={block_id?:string;page:number;parse_id?:string|null;side?:'en'|'zh'};
 export type PaperSummary={title:string;parse_id:string|null;totalPages:number;textPages:number;missingPages:number[];blocks:number};
-export type PaperScope=PaperSummary&{contextMode?:'standard'|'whole';focus?:{page:number;block_id:string;kind:'paragraph'|'page';origin?:string}|null;chapter?:string;kind:'reading-context'|'full-text'|'partial-text';providedBlocks:number;totalBlocks:number;providedCharacters:number;historyUsed:number;historyTotal:number;attached:number};
+export type PaperScope=PaperSummary&{contextMode?:'standard'|'whole';focus?:{page:number;block_id:string;kind:'paragraph'|'page';origin?:string}|null;chapter?:string;background?:{kind:'abstract'|'fallback';availableBlocks:number;providedBlocks:number;origins:string[]}|null;glossaryEntries?:number;kind:'reading-context'|'full-text'|'partial-text';providedBlocks:number;totalBlocks:number;providedCharacters:number;historyUsed:number;historyTotal:number;attached:number};
 export type AnnotationState={paper?:PaperSummary;contexts:AnnotationContext[];notes:Annotation[];turns:QATurn[]};

@@ -17,3 +17,14 @@ public/pdf-assets/
 *.sqlite
 *.sqlite-*
 *.db
+
+.packaging-windows/
+
+# Public installation guide
+!/docs/windows.md
+
+# Local upgrade helpers and opt-in validation on a personal library
+/scripts/install-v5*.mjs
+/scripts/check-formal-v5*.mjs
+/tests/chat-style-real.cjs
+/tests/structure-real.cjs

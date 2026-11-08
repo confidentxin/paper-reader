@@ -12,7 +12,7 @@ function proxyEnvironment(text) {
   return result;
 }
 async function cliEnvironment(source = process.env, platform = process.platform, readProxy = () => promisify(execFile)('/usr/sbin/scutil', ['--proxy'], {timeout: 1500, maxBuffer: 65536}).then(r => r.stdout)) {
-  const env = Object.fromEntries(['PATH','HOME','USER','LOGNAME','TMPDIR','LANG','LC_ALL','CODEX_HOME','HTTPS_PROXY','HTTP_PROXY','ALL_PROXY','NO_PROXY','https_proxy','http_proxy','all_proxy','no_proxy'].filter(k => source[k]).map(k => [k, source[k]]));
+  const env = Object.fromEntries(['PATH','Path','SystemRoot','SYSTEMROOT','WINDIR','USERPROFILE','APPDATA','LOCALAPPDATA','TEMP','TMP','PATHEXT','COMSPEC','HOME','USER','LOGNAME','TMPDIR','LANG','LC_ALL','CODEX_HOME','HTTPS_PROXY','HTTP_PROXY','ALL_PROXY','NO_PROXY','https_proxy','http_proxy','all_proxy','no_proxy'].filter(k => source[k]).map(k => [k, source[k]]));
   // Explicit proxy environments take precedence as a unit, including NO_PROXY.
   if (platform === 'darwin' && !Object.keys(env).some(k => /proxy$/i.test(k))) {
     try { Object.assign(env, proxyEnvironment(await readProxy())); } catch { /* Existing direct connection remains available. */ }
