@@ -139,3 +139,7 @@
 | yargs-parser | 22.0.0 | ISC | LICENSE.txt |
 
 2026-11-07 Windows 包复用同版本 Electron/Packager/KaTeX 及现有依赖，未引入第三方代码；Windows 运行时的 LICENSE、LICENSES.chromium.html 与应用许可清单一并保留。
+
+## Windows EXE 安装器
+
+2026-11-08 新增 NSIS 3.13，仅用于外部构建工具，无新 npm 依赖或应用运行时模块。使用 zlib 压缩；NSIS 及其组件许可原文保存在 [NSIS-COPYING.txt](../scripts/windows/NSIS-COPYING.txt)，并随安装包解压。主工具与 zlib 为 zlib/libpng 许可，原文件同时保留其他可选压缩器声明，本安装器未采用 bzip2/LZMA。参考 [官方脚本手册](https://nsis.sourceforge.io/Docs/Chapter4.html)。

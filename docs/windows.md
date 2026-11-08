@@ -1,12 +1,14 @@
 # Windows x64 使用说明
 
-[下载 0.5.9 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip) · [发布页面与校验值](https://github.com/confidentxin/paper-reader/releases/tag/v0.5.9)
+[下载 0.5.9 EXE 安装包](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-Setup-x64.exe) · [免安装 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip) · [发布页面与校验值](https://github.com/confidentxin/paper-reader/releases/tag/v0.5.9)
 
 ## 安装与升级
 
-完整解压 ZIP 到用户可写目录，打开 `Paper Reader-win32-x64` 中的 `Paper Reader.exe`。不要在压缩包内直接运行，也不要只复制 exe；旁边的 resources、locales、DLL 等文件需要保留。此为未签名的免安装预览包，没有安装器或自动更新。
+推荐下载 `Paper-Reader-0.5.9-Setup-x64.exe`，双击运行安装向导。默认安装到 `%LOCALAPPDATA%\Programs\Paper Reader`，无需管理员权限，创建桌面和开始菜单快捷方式，并在 Windows 已安装应用中登记卸载入口。升级或卸载前请先正常退出应用；卸载仅删除安装的程序文件和快捷方式，保留 `%APPDATA%\Paper Reader` 文献库。安装完成页可主动选择启动。
 
-升级前正常退出，并备份整个数据目录，再替换程序目录。Windows 数据默认位于 `%APPDATA%\Paper Reader`，实际路径以“数据与版本”显示为准。
+如使用免安装 ZIP，完整解压到用户可写目录，打开 `Paper Reader-win32-x64` 中的 `Paper Reader.exe`。不要在压缩包内直接运行，也不要只复制 exe；旁边的 resources、locales、DLL 等文件需要保留。EXE 与 ZIP 均未代码签名，没有自动更新；当前仍属 Windows 预览版。
+
+升级前正常退出，并备份整个数据目录，再运行新版安装程序（ZIP 版则替换程序目录）。Windows 数据默认位于 `%APPDATA%\Paper Reader`，实际路径以“数据与版本”显示为准。
 
 ## 翻译与助读
 
@@ -26,7 +28,7 @@ CLI 不随应用分发，安装和登录需用户自行完成。应用不复制 
 
 ## 验证范围
 
-0.5.9 Windows 包在 Mac 上交叉构建，检查了 AMD64 可执行文件、ASAR 版本与源码一致性、离线资源/许可证和 ZIP 完整性。Windows 运行时尚未实机验证，不将 Mac 的桌面检查当作 Windows 验收。
+0.5.9 Windows 包在 Mac 上交叉构建，检查了 AMD64 可执行文件、ASAR 版本与源码一致性、离线资源/许可证和 ZIP 完整性。新增 EXE 使用 NSIS 3.13 / zlib，已解出全部 73 个应用文件并逐文件核对 SHA-256，另核对卸载程序与 NSIS 许可。Windows 原生安装/启动/卸载尚未验证；已提供可选 CI 验证模板，但本轮账户缺 workflow 权限，未启用或执行。不将包检查或 Mac 桌面检查当作 Windows 实机验收。
 
 建议在 Windows 上依次验证：启动 → 中文路径 PDF 导入 → 双语/精读和原稿阅读 → 标注/笔记/取消高亮 → 退出重开 → 配置服务、小范围提问并停止 → 核对引用和导出。真实账户连接、系统凭据保存、CLI 取消与长期使用仍待验证。
 
@@ -35,6 +37,11 @@ CLI 不随应用分发，安装和登录需用户自行完成。应用不复制 
 ```sh
 npm ci
 npm run package:windows
+npm run package:windows:installer
 ```
 
 使用锁定的 Electron/Packager 版本；输出目录 `release/windows/`，ZIP 位于 `release/`。保留 Electron 与应用内第三方许可，无新增依赖。SHA-256 校验值随 Release 的 `SHA256SUMS.txt` 提供。
+
+EXE 构建另需 NSIS 3.13（提供 makensis 命令）；macOS 可通过 Homebrew 安装 makensis，Windows 安装 NSIS 并将其目录加入 PATH。必要时用 MAKENSIS 环境变量指定编译器绝对路径。仅包装已生成并核对源码版本的包时可运行 `node scripts/package-windows-installer.mjs`。NSIS 许可原文在 [NSIS-COPYING.txt](../scripts/windows/NSIS-COPYING.txt)，随安装器解压到程序目录；不是新增应用运行时依赖。
+
+可选 Windows CI 模板：[windows-installer-ci.yml](../scripts/windows/windows-installer-ci.yml)。具有 workflow 权限后可复制到 `.github/workflows/` 并手动触发，输入安装包 SHA-256；在 GitHub Windows runner 中检查安装、快捷方式、SQLite 初始化、重装、卸载与资料保留。模板当前固定检查 0.5.9，不代表已经执行成功。

@@ -1,13 +1,13 @@
 # Paper Reader · 论文阅读器
 
-**[下载 Mac 0.5.9（Apple Silicon）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-macOS-arm64.zip)** · **[下载 Windows 0.5.9（x64 预览版）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip)** · [所有版本](https://github.com/confidentxin/paper-reader/releases)
+**[下载 Mac 0.5.9（Apple Silicon）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-macOS-arm64.zip)** · **[下载 Windows 0.5.9 安装包（x64 EXE）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-Setup-x64.exe)** · [所有版本](https://github.com/confidentxin/paper-reader/releases)
 
 面向个人论文阅读的本地桌面应用，支持中英文重排双栏、中文精读和独立 PDF 原稿核对。
 
 ## 安装
 
 - **Mac**：解压 ZIP，将 `Paper Reader.app` 移到应用程序目录后打开。当前提供 M 系列芯片版本，Intel Mac 尚未提供。应用未经过 Apple Developer ID 签名和公证，首次打开可能需要按系统提示在“系统设置 → 隐私与安全性”允许打开。
-- **Windows**：完整解压到可写目录，打开其中的 `Paper Reader.exe`；不要在 ZIP 内运行或只复制 exe。提供 x64 免安装预览包，没有安装器、自动更新或代码签名。[Windows 使用与迁移说明](docs/windows.md)。Windows 已完成交叉构建与包检查，尚未完成 Windows 实机验收。
+- **Windows**：下载并双击 `Paper-Reader-0.5.9-Setup-x64.exe`，按向导安装；默认仅安装到当前用户目录，创建桌面和开始菜单快捷方式，并提供卸载入口。卸载会保留文献库。仍提供 [免安装 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip)。安装包尚未代码签名，没有自动更新。[Windows 使用与迁移说明](docs/windows.md)。Windows 已完成交叉构建与包检查，尚未完成 Windows 实机验收。
 - **升级**：先正常退出并备份整个文献库，再替换程序。数据目录可在“数据与版本”中查看。旧版本下载保留在“所有版本”。
 
 ## 功能
@@ -47,6 +47,7 @@ npm run build            # 构建
 npm run test:desktop      # 基础桌面流程检查
 npm run package:mac       # 按当前 Mac 架构打包
 npm run package:windows   # Windows x64 免安装 ZIP
+npm run package:windows:installer # Windows x64 EXE（需 NSIS 3.13）
 ```
 
 开发预览：运行 `npm run dev -- --port 5173 --strictPort`，再在另一个终端运行 `npm run desktop:dev`（该命令使用 POSIX 环境变量语法）。浏览器预览不具备完整桌面文件功能。
@@ -55,7 +56,7 @@ Mac 包默认输出到 `~/Applications/Paper Reader Builds/`，Windows 包目录
 
 ## 当前验证与边界
 
-0.5.9 通过 107 项自动检查，以及最终 Mac 候选包的 52 项桌面检查，覆盖多厂商配置、三个 API 协议、流式问答、停止/断线/重试、CLI 适配和双语阅读。新增厂商的行为验证使用明确的本地模拟服务和 CLI；不等于真实厂商账户或所有 CLI 版本已验证。Mac 已安装核对原数据保留；Windows 通过 x64 包结构、源码一致性和归档检查，实机启动与操作待验收。
+0.5.9 通过 107 项自动检查，以及最终 Mac 候选包的 52 项桌面检查，覆盖多厂商配置、三个 API 协议、流式问答、停止/断线/重试、CLI 适配和双语阅读。新增厂商的行为验证使用明确的本地模拟服务和 CLI；不等于真实厂商账户或所有 CLI 版本已验证。Mac 已安装核对原数据保留；Windows 通过 x64 包结构、源码一致性和归档检查；EXE 安装包的 73 个应用文件解压后与已验证包逐文件一致。Windows 原生安装、启动与卸载仍待实机验收。
 
 复杂 PDF 的重排、图表识别、句组对应和公式提取可能不准确，请通过原稿核对。扫描件 OCR、跨论文检索与云同步尚未提供。真实整篇翻译质量、各服务实际连通性及长时间内存压力仍需验证；AI 译文与回答需要人工核对。
 
