@@ -2,15 +2,17 @@ Unicode true
 !include MUI2.nsh
 !include LogicLib.nsh
 !include x64.nsh
+!include FileFunc.nsh
+Var PreviousInstallDir
 Name "Paper Reader"
 OutFile "${OUTPUT}"
 InstallDir "$LOCALAPPDATA\Programs\Paper Reader"
 RequestExecutionLevel user
 SetCompressor /SOLID zlib
-VIProductVersion "${VERSION}.0"
+VIProductVersion "${VERSION}.${INSTALLER_REVISION}"
 VIAddVersionKey "ProductName" "Paper Reader"
 VIAddVersionKey "FileDescription" "Paper Reader Setup"
-VIAddVersionKey "FileVersion" "${VERSION}"
+VIAddVersionKey "FileVersion" "${VERSION}.${INSTALLER_REVISION}"
 VIAddVersionKey "ProductVersion" "${VERSION}"
 VIAddVersionKey "LegalCopyright" "Paper Reader contributors"
 !define UNINSTALL_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\PaperReader"
@@ -19,6 +21,8 @@ VIAddVersionKey "LegalCopyright" "Paper Reader contributors"
 !define MUI_FINISHPAGE_RUN_NOTCHECKED
 !define MUI_FINISHPAGE_TEXT "安装完成。个人文献库与程序分开保存；卸载程序会保留文献库。"
 !insertmacro MUI_PAGE_WELCOME
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE ValidateInstallDir
+!insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 !insertmacro MUI_UNPAGE_CONFIRM
@@ -50,12 +54,35 @@ Function .onInit
   SetShellVarContext current
   SetRegView 64
   ReadRegStr $0 HKCU "${UNINSTALL_KEY}" "InstallLocation"
+  StrCpy $PreviousInstallDir $0
   ${If} $0 != ""
     StrCpy $INSTDIR $0
   ${EndIf}
 FunctionEnd
 
+Function ValidateInstallDir
+  ${If} $PreviousInstallDir != ""
+  ${AndIf} $INSTDIR != $PreviousInstallDir
+    IfFileExists "$PreviousInstallDir\Paper Reader.exe" 0 done
+    MessageBox MB_OK|MB_ICONEXCLAMATION "检测到已有安装：$PreviousInstallDir。更换安装位置前请先卸载旧程序，文献库会保留。 / Uninstall the existing copy before changing its location. Your library will be kept."
+    Abort
+  ${EndIf}
+  done:
+FunctionEnd
+
+Function .onVerifyInstDir
+  ; Keep application files out of drive roots and the separate personal library.
+  ${GetRoot} "$INSTDIR" $0
+  ${If} $INSTDIR == "$0\"
+  ${OrIf} $INSTDIR == "$0"
+  ${OrIf} $INSTDIR == "$APPDATA\Paper Reader"
+    Abort
+  ${EndIf}
+FunctionEnd
+
 Section "Paper Reader"
+  ; Also validate silent /D= installs, which skip the directory page.
+  Call ValidateInstallDir
   Call CheckClosed
   SetOutPath "$INSTDIR"
   File /r "${PAYLOAD}/*"

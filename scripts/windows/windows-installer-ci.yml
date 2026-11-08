@@ -20,16 +20,16 @@ jobs:
           EXPECTED_SHA256: ${{ inputs.sha256 }}
         run: |
           $ErrorActionPreference = 'Stop'
-          gh release download v0.5.9 --repo $env:GITHUB_REPOSITORY --pattern Paper-Reader-0.5.9-Setup-x64.exe --dir $env:RUNNER_TEMP
+          gh release download v0.5.9 --repo $env:GITHUB_REPOSITORY --pattern Paper-Reader-0.5.9-Setup-r2-x64.exe --dir $env:RUNNER_TEMP
           if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
-          $setup = Join-Path $env:RUNNER_TEMP 'Paper-Reader-0.5.9-Setup-x64.exe'
+          $setup = Join-Path $env:RUNNER_TEMP 'Paper-Reader-0.5.9-Setup-r2-x64.exe'
           if ((Get-FileHash $setup -Algorithm SHA256).Hash.ToLower() -ne $env:EXPECTED_SHA256.ToLower()) { throw 'Hash mismatch' }
-          $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Paper Reader'
+          $installDir = Join-Path $env:LOCALAPPDATA '自选路径 With Spaces\Paper Reader'
           $dataDir = Join-Path $env:APPDATA 'Paper Reader'
           $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PaperReader'
           New-Item -ItemType Directory -Force $dataDir | Out-Null
           Set-Content (Join-Path $dataDir 'preserve-test.txt') 'keep-library'
-          $p = Start-Process $setup -ArgumentList '/S' -Wait -PassThru
+          $p = Start-Process $setup -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "Install failed: $($p.ExitCode)" }
           $exe = Join-Path $installDir 'Paper Reader.exe'
           if (!(Test-Path $exe)) { throw 'Missing installed executable' }
@@ -52,7 +52,7 @@ jobs:
           Start-Sleep -Seconds 2
           $dbHash = (Get-FileHash $sqlite.FullName -Algorithm SHA256).Hash
           Set-Content (Join-Path $installDir 'keep-me.txt') 'unrelated-file'
-          $p = Start-Process $setup -ArgumentList '/S' -Wait -PassThru
+          $p = Start-Process $setup -ArgumentList @('/S', "/D=$installDir") -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw 'Reinstall failed' }
           if ((Get-FileHash $sqlite.FullName -Algorithm SHA256).Hash -ne $dbHash) { throw 'Reinstall changed library' }
           Start-Process (Join-Path $installDir 'Uninstall.exe') -ArgumentList '/S' -Wait

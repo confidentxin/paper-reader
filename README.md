@@ -1,13 +1,13 @@
 # Paper Reader · 论文阅读器
 
-**[下载 Mac 0.5.9（Apple Silicon）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-macOS-arm64.zip)** · **[下载 Windows 0.5.9 安装包（x64 EXE）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-Setup-x64.exe)** · [所有版本](https://github.com/confidentxin/paper-reader/releases)
+**[下载 Mac 0.5.9（Apple Silicon）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-macOS-arm64.zip)** · **[下载 Windows 0.5.9 安装包（r2，可选路径）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-Setup-r2-x64.exe)** · [所有版本](https://github.com/confidentxin/paper-reader/releases)
 
 面向个人论文阅读的本地桌面应用，支持中英文重排双栏、中文精读和独立 PDF 原稿核对。
 
 ## 安装
 
 - **Mac**：解压 ZIP，将 `Paper Reader.app` 移到应用程序目录后打开。当前提供 M 系列芯片版本，Intel Mac 尚未提供。应用未经过 Apple Developer ID 签名和公证，首次打开可能需要按系统提示在“系统设置 → 隐私与安全性”允许打开。
-- **Windows**：下载并双击 `Paper-Reader-0.5.9-Setup-x64.exe`，按向导安装；默认仅安装到当前用户目录，创建桌面和开始菜单快捷方式，并提供卸载入口。卸载会保留文献库。仍提供 [免安装 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip)。安装包尚未代码签名，没有自动更新。[Windows 使用与迁移说明](docs/windows.md)。Windows 已完成交叉构建与包检查，尚未完成 Windows 实机验收。
+- **Windows**：下载并双击 `Paper-Reader-0.5.9-Setup-r2-x64.exe`，按向导在“选择安装位置”中选择文件夹（如 `D:\Apps\Paper Reader`）；默认安装到当前用户目录，创建桌面和开始菜单快捷方式，并提供卸载入口。卸载会保留文献库。仍提供 [免安装 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip)。安装包尚未代码签名，没有自动更新。[Windows 使用与迁移说明](docs/windows.md)。Windows 已完成交叉构建与包检查，尚未完成 Windows 实机验收。
 - **升级**：先正常退出并备份整个文献库，再替换程序。数据目录可在“数据与版本”中查看。旧版本下载保留在“所有版本”。
 
 ## 功能

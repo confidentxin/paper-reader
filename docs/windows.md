@@ -1,10 +1,12 @@
 # Windows x64 使用说明
 
-[下载 0.5.9 EXE 安装包](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-Setup-x64.exe) · [免安装 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip) · [发布页面与校验值](https://github.com/confidentxin/paper-reader/releases/tag/v0.5.9)
+[下载 0.5.9 r2 EXE 安装包（可选路径）](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-Setup-r2-x64.exe) · [免安装 ZIP](https://github.com/confidentxin/paper-reader/releases/download/v0.5.9/Paper-Reader-0.5.9-windows-x64.zip) · [发布页面与校验值](https://github.com/confidentxin/paper-reader/releases/tag/v0.5.9)
 
 ## 安装与升级
 
-推荐下载 `Paper-Reader-0.5.9-Setup-x64.exe`，双击运行安装向导。默认安装到 `%LOCALAPPDATA%\Programs\Paper Reader`，无需管理员权限，创建桌面和开始菜单快捷方式，并在 Windows 已安装应用中登记卸载入口。升级或卸载前请先正常退出应用；卸载仅删除安装的程序文件和快捷方式，保留 `%APPDATA%\Paper Reader` 文献库。安装完成页可主动选择启动。
+推荐下载 `Paper-Reader-0.5.9-Setup-r2-x64.exe`，双击运行安装向导，在“选择安装位置”中可浏览或填写当前用户可写的文件夹，例如 `D:\Apps\Paper Reader`。默认安装到 `%LOCALAPPDATA%\Programs\Paper Reader`，无需管理员权限，创建桌面和开始菜单快捷方式，并在 Windows 已安装应用中登记卸载入口。升级或卸载前请先正常退出应用；卸载仅删除安装的程序文件和快捷方式，保留 `%APPDATA%\Paper Reader` 文献库。安装完成页可主动选择启动。
+
+已有安装时默认回填原位置。若需要换到其他目录，请先从 Windows“已安装的应用”卸载旧程序，再运行 r2 选择新路径；文献库会保留。安装路径只影响程序，个人文献库仍位于 `%APPDATA%\Paper Reader`。不选盘符根目录或文献库本身，受保护目录可能没有写入权限。
 
 如使用免安装 ZIP，完整解压到用户可写目录，打开 `Paper Reader-win32-x64` 中的 `Paper Reader.exe`。不要在压缩包内直接运行，也不要只复制 exe；旁边的 resources、locales、DLL 等文件需要保留。EXE 与 ZIP 均未代码签名，没有自动更新；当前仍属 Windows 预览版。
 
@@ -44,4 +46,4 @@ npm run package:windows:installer
 
 EXE 构建另需 NSIS 3.13（提供 makensis 命令）；macOS 可通过 Homebrew 安装 makensis，Windows 安装 NSIS 并将其目录加入 PATH。必要时用 MAKENSIS 环境变量指定编译器绝对路径。仅包装已生成并核对源码版本的包时可运行 `node scripts/package-windows-installer.mjs`。NSIS 许可原文在 [NSIS-COPYING.txt](../scripts/windows/NSIS-COPYING.txt)，随安装器解压到程序目录；不是新增应用运行时依赖。
 
-可选 Windows CI 模板：[windows-installer-ci.yml](../scripts/windows/windows-installer-ci.yml)。具有 workflow 权限后可复制到 `.github/workflows/` 并手动触发，输入安装包 SHA-256；在 GitHub Windows runner 中检查安装、快捷方式、SQLite 初始化、重装、卸载与资料保留。模板当前固定检查 0.5.9，不代表已经执行成功。
+可选 Windows CI 模板：[windows-installer-ci.yml](../scripts/windows/windows-installer-ci.yml)。具有 workflow 权限后可复制到 `.github/workflows/` 并手动触发，输入 r2 安装包 SHA-256；在 GitHub Windows runner 中检查安装、快捷方式、SQLite 初始化、重装、卸载与资料保留。模板当前固定检查 0.5.9 r2 的自选中文/空格路径，不代表已经执行成功。

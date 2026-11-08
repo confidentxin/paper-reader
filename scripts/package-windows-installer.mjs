@@ -31,10 +31,12 @@ await fs.writeFile(uninstall, [
   ...files.sort().map(f => `Delete "$INSTDIR\\${f.replaceAll('/', '\\')}"`),
   ...dirs.sort((a,b) => b.split('/').length - a.split('/').length).map(d => `RMDir "$INSTDIR\\${d.replaceAll('/', '\\')}"`),
 ].join('\n') + '\n');
-const output = path.resolve(`release/Paper-Reader-${pkg.version}-Setup-x64.exe`);
+// Installer revision is independent of the unchanged application version.
+const revision = 2;
+const output = path.resolve(`release/Paper-Reader-${pkg.version}-Setup-r${revision}-x64.exe`);
 const compiler = process.env.MAKENSIS || 'makensis';
 const flag = process.platform === 'win32' ? '/' : '-';
-execFileSync(compiler, [`${flag}V3`, `${flag}DVERSION=${pkg.version}`, `${flag}DPAYLOAD=${payload}`, `${flag}DOUTPUT=${output}`,
+execFileSync(compiler, [`${flag}V3`, `${flag}DVERSION=${pkg.version}`, `${flag}DINSTALLER_REVISION=${revision}`, `${flag}DPAYLOAD=${payload}`, `${flag}DOUTPUT=${output}`,
   `${flag}DUNINSTALL_FILES=${uninstall}`, `${flag}DNSIS_LICENSE=${path.resolve('scripts/windows/NSIS-COPYING.txt')}`,
   path.resolve('scripts/windows/installer.nsi')], { stdio: 'inherit' });
 console.log(`Installer: ${output} (${files.length} payload files)`);
