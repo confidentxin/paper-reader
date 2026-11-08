@@ -28,3 +28,5 @@ public/pdf-assets/
 /scripts/check-formal-v5*.mjs
 /tests/chat-style-real.cjs
 /tests/structure-real.cjs
+
+.packaging-windows-installer/

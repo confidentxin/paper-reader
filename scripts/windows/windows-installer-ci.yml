@@ -1,0 +1,64 @@
+name: Windows installer smoke test
+on:
+  workflow_dispatch:
+    inputs:
+      sha256:
+        description: Expected SHA256 of the 0.5.9 installer
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  install-uninstall:
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Verify, install, launch, reinstall and uninstall
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA256: ${{ inputs.sha256 }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh release download v0.5.9 --repo $env:GITHUB_REPOSITORY --pattern Paper-Reader-0.5.9-Setup-x64.exe --dir $env:RUNNER_TEMP
+          if ($LASTEXITCODE -ne 0) { throw 'Download failed' }
+          $setup = Join-Path $env:RUNNER_TEMP 'Paper-Reader-0.5.9-Setup-x64.exe'
+          if ((Get-FileHash $setup -Algorithm SHA256).Hash.ToLower() -ne $env:EXPECTED_SHA256.ToLower()) { throw 'Hash mismatch' }
+          $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Paper Reader'
+          $dataDir = Join-Path $env:APPDATA 'Paper Reader'
+          $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\PaperReader'
+          New-Item -ItemType Directory -Force $dataDir | Out-Null
+          Set-Content (Join-Path $dataDir 'preserve-test.txt') 'keep-library'
+          $p = Start-Process $setup -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Install failed: $($p.ExitCode)" }
+          $exe = Join-Path $installDir 'Paper Reader.exe'
+          if (!(Test-Path $exe)) { throw 'Missing installed executable' }
+          if ((Get-ItemProperty $reg).DisplayVersion -ne '0.5.9') { throw 'Missing uninstall registration' }
+          $desktopLink = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Paper Reader.lnk'
+          $menuLink = Join-Path ([Environment]::GetFolderPath('Programs')) 'Paper Reader\Paper Reader.lnk'
+          if (!(Test-Path $desktopLink) -or !(Test-Path $menuLink)) { throw 'Missing shortcuts' }
+          $shell = New-Object -ComObject WScript.Shell
+          if ($shell.CreateShortcut($menuLink).TargetPath -ne $exe) { throw 'Shortcut target mismatch' }
+          $app = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 12
+          if ($app.HasExited) { throw "App exited at startup: $($app.ExitCode)" }
+          $sqlite = Get-ChildItem $dataDir -Filter '*.sqlite' -Recurse | Select-Object -First 1
+          if (!$sqlite) { throw 'App did not initialize SQLite' }
+          $header = [System.Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($sqlite.FullName)[0..14])
+          if ($header -ne 'SQLite format 3') { throw 'Invalid SQLite header' }
+          $app.CloseMainWindow() | Out-Null
+          Start-Sleep -Seconds 3
+          Get-Process 'Paper Reader' -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 2
+          $dbHash = (Get-FileHash $sqlite.FullName -Algorithm SHA256).Hash
+          Set-Content (Join-Path $installDir 'keep-me.txt') 'unrelated-file'
+          $p = Start-Process $setup -ArgumentList '/S' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw 'Reinstall failed' }
+          if ((Get-FileHash $sqlite.FullName -Algorithm SHA256).Hash -ne $dbHash) { throw 'Reinstall changed library' }
+          Start-Process (Join-Path $installDir 'Uninstall.exe') -ArgumentList '/S' -Wait
+          for ($i = 0; $i -lt 30 -and (Test-Path $reg); $i++) { Start-Sleep -Seconds 1 }
+          if ((Test-Path $exe) -or (Test-Path $reg) -or (Test-Path $desktopLink) -or (Test-Path $menuLink)) { throw 'Incomplete uninstall' }
+          if ((Get-Content (Join-Path $dataDir 'preserve-test.txt')) -ne 'keep-library') { throw 'Library marker removed' }
+          if ((Get-FileHash $sqlite.FullName -Algorithm SHA256).Hash -ne $dbHash) { throw 'Uninstall changed library' }
+          if (!(Test-Path (Join-Path $installDir 'keep-me.txt'))) { throw 'Uninstall removed unrelated file' }
+          'PASS: hash, install, shortcuts, registration, app startup/SQLite, reinstall, uninstall, library and unrelated file retention' | Tee-Object -FilePath $env:GITHUB_STEP_SUMMARY
